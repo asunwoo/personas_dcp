@@ -6,8 +6,9 @@ var dcpServiceId;
 
 const dcpBaseURL = 'https://www.optimizelyapis.com/experiment/v1/';
 const dcpBaseUpdateURL = 'https://www.optimizelyapis.com/experiment/v1/dcp_datasource_attributes/';
-const dcpDataSourcesURL = 'https://www.optimizelyapis.com/experiment/v1/dcp_datasources/' + dcpSourceId + '/' + 'dcp_datasource_attributes';
 const dcpBaseUserUpdateURL = 'https://vis.optimizely.com/api/customer_profile/';
+
+var dcpDataSourcesURL;
 
 const createAttrJSONPayload = '{"name":"%name%","datatype":"%datatype%","description":"%description%"}';
 const unarchivePayload = '{"archived":false}';
@@ -25,23 +26,25 @@ async function fetchDCPAttributes(){
         withCredentials: true,
         credentials: 'include'
     };
-
+  
     console.log(dcpDataSourcesURL);
-
+	
     try {
         let response = await fetch(dcpDataSourcesURL, dcpAttributes);
         const data = await response.json();
-
+        
         attributeMap = new Map();
         archivedAttributeMap = new Map();
         for(var k in data) {
-            if (data[k].archived == false) {
-                attributeMap.set(data[k].name, data[k].id);
-            } else{
-                archivedAttributeMap.set(data[k].name, data[k].id);
-            }
+          if (data[k].archived == false) {
+            attributeMap.set(data[k].name, data[k].id);
+            console.log("Attribute Map: " + data[k].name + " " + data[k].id);
+          } else{
+            archivedAttributeMap.set(data[k].name, data[k].id);
+            console.log("Archived Map: " + data[k].name + " " + data[k].id);
+          }
         }
-
+        
     } catch(e){
         console.log("ERROR! ", e);
     }
@@ -51,13 +54,19 @@ async function createDCPAttribute(name, value) {
     // Default options are marked with *
     var url = dcpDataSourcesURL;
     var dataType = typeof value;
-
+  
     if (dataType == "number"){
-        dataType = "long"
+      if(value.toString().includes('.')){
+        dataType = "double"
+      }else{
+	      dataType = "long"
+      }
+    } else if(dataType == "boolean"){
+      dataType = "bool";
     }
-
-    var body = createAttrJSONPayload.replace('%name%', name).replace('%datatype%', dataType).replace('%description%', name);
-
+    
+	var body = createAttrJSONPayload.replace('%name%', name).replace('%datatype%', dataType).replace('%description%', name);
+  
     let callAttributes = {
         method: 'POST',
         credentials: 'include',
@@ -67,15 +76,18 @@ async function createDCPAttribute(name, value) {
         },
         body: body, // body data type must match "Content-Type" header
     };
-
+  
     try {
-        let response = await fetch(url, callAttributes);
-        if(response.status >= 200 && response.status < 300){
-            return true;
-        }
-
+      let response = await fetch(url, callAttributes);
+      if(response.status >= 200 && response.status < 300){
+        return true;
+      }else{
+        console.log("Error, Return Status: " + response.status + " " + response.statusText + ", Body: " + body);
+        console.log("URL: " + url);
+      }
+        
     } catch(e){
-        console.log("ERROR! ", e);
+      console.log("ERROR! ", e);
     }
     return false;
 }
@@ -83,7 +95,7 @@ async function createDCPAttribute(name, value) {
 async function unarchiveDCPAttribute(attributeId) {
     // Default options are marked with *
     var url = dcpBaseUpdateURL + attributeId;
-
+  
     let callAttributes = {
         method: 'PUT',
         credentials: 'include',
@@ -91,17 +103,19 @@ async function unarchiveDCPAttribute(attributeId) {
             "Token": token,
             "Content-Type": "application/json"
         },
-        body: unarchivePayload,
+        body: unarchivePayload, 
     }
-
+  
     try {
-        let response = await fetch(url, callAttributes);
-        if(response.status >= 200 && response.status < 300){
-            return true;
-        }
-
+      let response = await fetch(url, callAttributes);
+      if(response.status >= 200 && response.status < 300){
+        return true;
+      } else{
+        console.log("Error, Return Status: " + response.status + " " + response.statusText);
+      }
+        
     } catch(e){
-        console.log("ERROR! ", e);
+      console.log("ERROR! ", e);
     }
     return false;
 }
@@ -119,29 +133,32 @@ async function checkExistingAttributes(attributeName, attributeValue){
 }
 
 async function updateDCPUser(dcpServiceId, dcpSourceId, userId, jsonPayload) {
+    
+  var url = dcpBaseUserUpdateURL + dcpServiceId + '/' + dcpSourceId + '/%22' + userId + '%22';
 
-    var url = dcpBaseUserUpdateURL + dcpServiceId + '/' + dcpSourceId + '/%22' + userId + '%22';
-
-    let callAttributes = {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-            "Token": token,
-            "Content-Type": "application/json"
-        },
-        body: jsonPayload, // body data type must match "Content-Type" header
-    };
-    try {
-        let response = await fetch(url, callAttributes);
-        console.log(response, response.status);
-        if(response.status >= 200 && response.status < 300){
-            return true;
-        }
-
-    } catch(e){
-        console.log("ERROR! ", e);
+  let callAttributes = {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      "Token": token,
+      "Content-Type": "application/json"
+    },
+    body: jsonPayload, // body data type must match "Content-Type" header
+  };
+  try {
+    let response = await fetch(url, callAttributes);
+    console.log(response, response.status);
+    if(response.status >= 200 && response.status < 300){
+      return true;
+      console.log(response.status + " " + response.statusText + " " + url);
+    }else{
+      console.log("Error, Return Status: " + response.status + " " + response.statusText + " " + url);
     }
-    return false;
+
+  } catch(e){
+    console.log("ERROR! ", e);
+  }
+  return false;
 }
 
 function createUpdateUserPayload(event){
@@ -169,59 +186,68 @@ function printResults(){
 // identify demonstrates how to filter event data, e.g. for removing PII
 // and how to enrich data using fetch
 async function identify(event, settings) {
-    token = settings.apiKey;
-    dcpSourceId = settings.dcpDatasourceId;
-    dcpServiceId = settings.dcpServiceId;
-
-    userId = event.anonymousId;
-
+  token = settings.apiKey;
+  dcpSourceId = settings.dcpDatasourceId;
+  dcpServiceId = settings.dcpServiceId;
+  
+  dcpDataSourcesURL = dcpBaseURL + 'dcp_datasources/' + dcpSourceId + '/' + 'dcp_datasource_attributes';
+  
+  console.log("Token: " + token);
+  console.log("ServiceId: " + dcpServiceId);
+  console.log("SourceId: " + dcpSourceId);
+  
+  userId = event.anonymousId;
+  if(userId == null || userId == ''){
+    userId = event.anonymous_id;
+  }
+  
+  if(settings.checkDcpForAttribute){
     try{
-        await fetchDCPAttributes();
+      await fetchDCPAttributes();
     }catch(e){
-        console.log('ERROR Fetching existing DCP Attributes', e);
+      console.log('ERROR Fetching existing DCP Attributes', e); 
     }
 
-
     try{
-        for(var k in event.traits) {
-            await checkExistingAttributes(k, event.traits[k]);
-        }
-
+      for(var k in event.traits) {
+        await checkExistingAttributes(k, event.traits[k]);
+      }
     }catch(e){
-        console.log('ERROR Checking existing DCP Attributes', e);
+      console.log('ERROR Checking existing DCP Attributes', e); 
     }
-
-    return await updateDCPUser(dcpServiceId, dcpSourceId, userId, createUpdateUserPayload(event))
+  }
+      
+  return await updateDCPUser(dcpServiceId, dcpSourceId, userId, createUpdateUserPayload(event))
 }
 
 // group demonstrates how to handle an invalid event
 async function group(event, settings) {
-    if (!event.company) {
-        throw new InvalidEventPayload("company is required")
-    }
+  if (!event.company) {
+    throw new InvalidEventPayload("company is required")
+  }
 }
 
 // page demonstrates how to handle an invalid setting
 async function page(event, settings) {
-    if (!settings.accountId) {
-        throw new ValidationError("Account ID is required")
-    }
+  if (!settings.accountId) {
+    throw new ValidationError("Account ID is required")
+  }
 }
 
 // alias demonstrats how to handle an event that isn't supported
 async function alias(event, settings) {
-    throw new EventNotSupported("alias not supported")
+  throw new EventNotSupported("alias not supported")
 }
 
 
 // screen demonstrates how to handle an event that isn't supported
 async function screen(event, settings) {
-    throw new EventNotSupported("screen not supported")
+  throw new EventNotSupported("screen not supported")
 }
 
 // below are custom helper functions
 function queryString(params) {
-    return Object.keys(params)
-        .map(k => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
-        .join('&');
+  return Object.keys(params)
+    .map(k => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
+    .join('&');
 }
